@@ -307,7 +307,7 @@ function App() {
           <div style={styles.resultContainer}>
             <h3 style={styles.resultTitle}>Métricas de Reentrenamiento</h3>
             <p>Precisión: {retrainResult.precision}</p>
-            <p>Revocación: {retrainResult.recall}</p>
+            <p>Recall: {retrainResult.recall}</p>
             <p>Puntuación F1: {retrainResult.f1_score}</p>
           </div>
         )}
@@ -324,7 +324,7 @@ function App() {
             ...(resetLoading && styles.buttonDisabled),
           }}
         >
-          Reiniciar Modelo
+          Reiniciar
         </button>
         {resetLoading && <Spinner />}
         {resetError && <p style={styles.error}>Error: {resetError}</p>}
