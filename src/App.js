@@ -16,54 +16,107 @@ function Spinner() {
 }
 
 function App() {
-  // State for prediction section (multiple texts)
+  // Modo de entrada: true = JSON, false = TextArea
+  const [useJson, setUseJson] = useState(false);
+
+  // State para el modo de texto
   const [newsTexts, setNewsTexts] = useState([""]);
+  // State para el modo JSON
+  const [jsonData, setJsonData] = useState(null);
+
   const [predictions, setPredictions] = useState([]);
   const [predictError, setPredictError] = useState("");
   const [predictLoading, setPredictLoading] = useState(false);
 
-  // State for retrain section
+  // State para retrain
   const [csvFile, setCsvFile] = useState(null);
   const [retrainResult, setRetrainResult] = useState(null);
   const [retrainError, setRetrainError] = useState("");
   const [retrainLoading, setRetrainLoading] = useState(false);
 
-  // State for reset section
+  // State para reset
   const [resetMessage, setResetMessage] = useState("");
   const [resetError, setResetError] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
 
-  // Handler for updating a specific news text input
+  // Handler para cambiar entre modo Texto y JSON
+  const handleSwitchChange = () => {
+    setUseJson(!useJson);
+    // Limpiar estados correspondientes
+    setNewsTexts([""]);
+    setJsonData(null);
+  };
+
+  // Handler para actualizar texto en el modo Texto
   const handleNewsTextChange = (index, value) => {
     const newNewsTexts = [...newsTexts];
     newNewsTexts[index] = value;
     setNewsTexts(newNewsTexts);
   };
 
-  // Handler to add a new news text field
+  // Handler para agregar otro campo de texto
   const addNewsTextField = () => {
     setNewsTexts([...newsTexts, ""]);
   };
 
-  // Handler for prediction
+  // Handler para cargar archivo JSON
+  const handleJsonUpload = (e) => {
+    setPredictError(""); 
+    const file = e.target.files[0];
+    if (!file) return;
+    // Solo permitir archivos con extensión .json
+    if (!file.name.toLowerCase().endsWith(".json")) {
+      setPredictError("Por favor, sube un archivo con extensión .json.");
+      setJsonData(null);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target.result);
+        setJsonData(parsed);
+      } catch (error) {
+        setPredictError("El archivo JSON está mal formado. Corrige el formato e inténtalo de nuevo.");
+        setJsonData(null);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Handler para predecir
   const handlePredict = async (e) => {
     e.preventDefault();
     setPredictError("");
     setPredictions([]);
-    if (newsTexts.filter(text => text.trim() !== "").length === 0) {
-      setPredictError("Por favor, ingresa al menos un texto de noticia.");
-      return;
+    let instances = [];
+    if (useJson) {
+      if (!jsonData) {
+        setPredictError("Por favor, sube un archivo JSON válido.");
+        return;
+      }
+      // Se asume que el JSON es un array de objetos con la propiedad "text"
+      let tempArray = jsonData.instances
+      if (!Array.isArray(tempArray)) {
+        setPredictError("El JSON debe ser un arreglo de instancias.");
+        return;
+      }
+      instances = tempArray.filter(item => item.text && item.text.trim() !== "");
+    } else {
+      if (newsTexts.filter(text => text.trim() !== "").length === 0) {
+        setPredictError("Por favor, ingresa al menos un texto de noticia.");
+        return;
+      }
+      instances = newsTexts
+        .filter(text => text.trim() !== "")
+        .map(text => ({ text }));
     }
     setPredictLoading(true);
     try {
+      console.log("wut",JSON.stringify({ instances }))
       const response = await fetch("http://localhost:8000/predict", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          instances: newsTexts
-            .filter(text => text.trim() !== "")
-            .map(text => ({ text })),
-        }),
+        body: JSON.stringify({ instances }),
       });
       if (!response.ok) {
         const errorData = await response.json();
@@ -78,7 +131,7 @@ function App() {
     }
   };
 
-  // Handler for retraining the model
+  // Handler para reentrenar el modelo
   const handleRetrain = async (e) => {
     e.preventDefault();
     setRetrainError("");
@@ -108,7 +161,7 @@ function App() {
     }
   };
 
-  // Handler for resetting the model
+  // Handler para reiniciar el modelo
   const handleReset = async () => {
     setResetError("");
     setResetMessage("");
@@ -133,37 +186,66 @@ function App() {
   return (
     <div style={styles.container}>
       <h1 style={styles.title}>Fake News Detector</h1>
+      {/* Switch para seleccionar modo de entrada */}
+      <div style={styles.switchContainer}>
+        <label style={styles.switchLabel}>
+          <input
+            type="checkbox"
+            checked={useJson}
+            onChange={handleSwitchChange}
+            style={styles.switchInput}
+          />
+          Modo JSON
+        </label>
+      </div>
 
-      {/* Prediction Section */}
+      {/* Sección de Predicción */}
       <section style={styles.section}>
         <h2 style={styles.sectionTitle}>Predecir Noticias Falsas</h2>
         <form onSubmit={handlePredict} style={styles.form}>
-          {newsTexts.map((text, index) => (
-            <div key={index} style={styles.formGroup}>
-              <label htmlFor={`newsText-${index}`} style={styles.label}>
-                Texto de Noticia {index + 1}
+          {useJson ? (
+            <div style={styles.formGroup}>
+              <label htmlFor="jsonFile" style={styles.label}>
+                Subir Archivo JSON
               </label>
-              <textarea
-                id={`newsText-${index}`}
-                placeholder="Pega o escribe aquí el contenido de la noticia..."
-                style={styles.textarea}
-                value={text}
-                onChange={(e) => handleNewsTextChange(index, e.target.value)}
-                rows={5}
+              <input
+                id="jsonFile"
+                type="file"
+                accept=".json"
+                onChange={handleJsonUpload}
+                style={styles.fileInput}
               />
             </div>
-          ))}
-          <button
-            type="button"
-            onClick={addNewsTextField}
-            disabled={resetLoading || retrainLoading || predictLoading}
-            style={{
-              ...styles.plusButton,
-              ...(resetLoading || retrainLoading || predictLoading ? styles.buttonDisabled : {}),
-            }}
-          >
-            +
-          </button>
+          ) : (
+            <>
+              {newsTexts.map((text, index) => (
+                <div key={index} style={styles.formGroup}>
+                  <label htmlFor={`newsText-${index}`} style={styles.label}>
+                    Texto de Noticia {index + 1}
+                  </label>
+                  <textarea
+                    id={`newsText-${index}`}
+                    placeholder="Pega o escribe aquí el contenido de la noticia..."
+                    style={styles.textarea}
+                    value={text}
+                    onChange={(e) => handleNewsTextChange(index, e.target.value)}
+                    rows={5}
+                  />
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addNewsTextField}
+                disabled={resetLoading || retrainLoading || predictLoading}
+                style={{
+                  ...styles.plusButton,
+                  ...(resetLoading || retrainLoading || predictLoading ? styles.buttonDisabled : {}),
+                }}
+              >
+                +
+              </button>
+            </>
+          )}
           <button
             type="submit"
             disabled={resetLoading || retrainLoading || predictLoading}
@@ -192,7 +274,7 @@ function App() {
         )}
       </section>
 
-      {/* Retrain Section */}
+      {/* Sección de Reentrenamiento */}
       <section style={styles.section}>
         <h2 style={styles.sectionTitle}>Reentrenar Modelo</h2>
         <form onSubmit={handleRetrain} style={styles.form}>
@@ -231,7 +313,7 @@ function App() {
         )}
       </section>
 
-      {/* Reset Model Section */}
+      {/* Sección de Reinicio */}
       <section style={styles.section}>
         <h2 style={styles.sectionTitle}>Reiniciar Modelo</h2>
         <button
@@ -252,7 +334,7 @@ function App() {
   );
 }
 
-// Improved production-ready styles (30% prettier with multi-input support, loaders, and plus button)
+// Estilos mejorados (producción, con soporte para múltiples entradas, loaders, switch y botón plus)
 const styles = {
   container: {
     fontFamily: "'Roboto', sans-serif",
@@ -379,6 +461,22 @@ const styles = {
   },
   resultItem: {
     marginBottom: "12px",
+  },
+  switchContainer: {
+    display: "flex",
+    justifyContent: "center",
+    marginBottom: "30px",
+  },
+  switchLabel: {
+    fontSize: "1.1rem",
+    color: "#495057",
+    display: "flex",
+    alignItems: "center",
+    gap: "0.5rem",
+  },
+  switchInput: {
+    width: "20px",
+    height: "20px",
   },
 };
 
